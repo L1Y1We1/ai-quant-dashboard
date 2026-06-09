@@ -43,6 +43,10 @@ def _normalize_download(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
 
 
 def refresh_prices(tickers: list[str] | None = None, period: str = "3y") -> dict[str, int]:
+    if tickers is None:
+        from .watchlist import candidate_tickers
+
+        tickers = sorted(set(UNIVERSE) | set(candidate_tickers()))
     tickers = tickers or UNIVERSE
     saved: dict[str, int] = {}
 
@@ -86,10 +90,17 @@ def get_price_history(ticker: str, limit: int = 260) -> list[dict]:
     return [dict(row) for row in reversed(rows)]
 
 
-def latest_market_snapshot() -> list[dict]:
+def latest_market_snapshot(tickers: list[str] | None = None) -> list[dict]:
+    params: list[str] = []
+    filter_sql = ""
+    if tickers:
+        placeholders = ",".join("?" for _ in tickers)
+        filter_sql = f"WHERE p.ticker IN ({placeholders})"
+        params = [ticker.upper() for ticker in tickers]
+
     with get_connection() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT p.*
             FROM prices p
             JOIN (
@@ -98,8 +109,10 @@ def latest_market_snapshot() -> list[dict]:
                 GROUP BY ticker
             ) latest
             ON p.ticker = latest.ticker AND p.date = latest.max_date
+            {filter_sql}
             ORDER BY p.ticker
-            """
+            """,
+            params,
         ).fetchall()
     return [dict(row) for row in rows]
 

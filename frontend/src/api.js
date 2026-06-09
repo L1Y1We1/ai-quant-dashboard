@@ -12,6 +12,7 @@ export const api = {
   health: () => request("/health"),
   refresh: () => request("/data/refresh", { method: "POST" }),
   prices: (ticker) => request(`/prices/${ticker}`),
+  potentialWatchlist: () => request("/watchlist/potential"),
   signals: () => request("/signals"),
   portfolio: () => request("/portfolio"),
   risk: () => request("/risk"),

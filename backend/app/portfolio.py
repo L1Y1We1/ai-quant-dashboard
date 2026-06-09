@@ -36,6 +36,10 @@ TARGET_WEIGHTS = {
 CASH_BALANCE = 25_000.0
 
 
+def get_current_holding_tickers() -> set[str]:
+    return {ticker for ticker, shares in SAMPLE_HOLDINGS.items() if shares > 0}
+
+
 def get_portfolio() -> dict:
     snapshots = {row["ticker"]: row for row in latest_market_snapshot()}
     holdings = []

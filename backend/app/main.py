@@ -13,6 +13,7 @@ from .portfolio import get_portfolio
 from .report import get_daily_report
 from .risk import get_risk_report
 from .strategy import get_signals
+from .watchlist import candidate_tickers, get_potential_watchlist
 
 
 app = FastAPI(title="AI Infrastructure Quant Platform", version="0.1.0")
@@ -39,7 +40,7 @@ def root() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "universe": UNIVERSE, "data": data_status()}
+    return {"status": "ok", "universe": UNIVERSE, "candidate_universe": candidate_tickers(), "data": data_status()}
 
 
 @app.post("/data/refresh")
@@ -74,3 +75,8 @@ def risk() -> dict:
 @app.get("/report/daily")
 def daily_report() -> dict:
     return get_daily_report()
+
+
+@app.get("/watchlist/potential")
+def potential_watchlist() -> dict:
+    return get_potential_watchlist()

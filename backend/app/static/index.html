@@ -144,6 +144,46 @@
         font-size: 14px;
       }
       .rule b { font-size: 13px; }
+      .tabs, .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .tabs button {
+        padding: 8px 11px;
+      }
+      .filters {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        background: #fbfcfb;
+      }
+      .filters label {
+        display: grid;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .filters select {
+        min-width: 160px;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .rating {
+        display: inline-flex;
+        min-width: 142px;
+        justify-content: center;
+        padding: 5px 8px;
+        border: 1px solid;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .strong { color: var(--green); background: #e9f7f1; border-color: #b8ead8; }
+      .watch { color: var(--blue); background: #edf3ff; border-color: #c8d8ff; }
+      .early { color: var(--amber); background: #fff8e6; border-color: #f3dea3; }
+      .avoid { color: var(--red); background: #fff0ef; border-color: #f5c6c3; }
       .hidden { display: none; }
       .empty { padding: 20px; color: var(--muted); }
 
@@ -196,6 +236,8 @@
       const universe = ["QQQ", "NVDA", "AVGO", "TSM", "MU", "MRVL", "VRT", "ANET", "AMZN", "PLTR", "TSLA"];
       let active = "dashboard";
       let selectedTicker = "NVDA";
+      let watchlistMode = "prices";
+      let candidateFilters = { theme: "All", rating: "All", signal: "All", volatility: "All" };
 
       const fmtCurrency = (value) => value == null ? "--" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
       const fmtPct = (value) => value == null ? "--" : `${(value * 100).toFixed(1)}%`;
@@ -204,6 +246,13 @@
         return res.json();
       });
       const signalPill = (signal) => `<span class="pill ${signal || "hold"}">${signal || "hold"}</span>`;
+      const ratingClass = (rating) => {
+        if (rating === "STRONG CANDIDATE") return "strong";
+        if (rating === "WATCH CANDIDATE") return "watch";
+        if (rating === "EARLY WATCH") return "early";
+        return "avoid";
+      };
+      const ratingPill = (rating) => `<span class="rating ${ratingClass(rating)}">${rating}</span>`;
 
       function setActive(page) {
         active = page;
@@ -316,13 +365,22 @@
       }
 
       async function renderWatchlist() {
+        if (watchlistMode === "potential") {
+          await renderPotentialWatchlist();
+          return;
+        }
+
         const data = await api(`/prices/${selectedTicker}`);
         const last = data.prices[data.prices.length - 1];
         document.getElementById("watchlist").innerHTML = `
           <div class="card">
             <div class="section-head">
               <h2>Watchlist</h2>
-              <select id="tickerSelect">${universe.map((x) => `<option ${x === selectedTicker ? "selected" : ""}>${x}</option>`).join("")}</select>
+              <div class="tabs">
+                <button class="active" id="priceTab">Price History</button>
+                <button id="potentialTab">Potential Stocks</button>
+                <select id="tickerSelect">${universe.map((x) => `<option ${x === selectedTicker ? "selected" : ""}>${x}</option>`).join("")}</select>
+              </div>
             </div>
             ${last ? `<div class="grid metrics" style="padding:16px;margin:0">
               <div class="metric"><label>Close</label><b>${fmtCurrency(last.close)}</b></div>
@@ -345,6 +403,98 @@
         document.getElementById("tickerSelect").addEventListener("change", (event) => {
           selectedTicker = event.target.value;
           renderWatchlist();
+        });
+        document.getElementById("potentialTab").addEventListener("click", () => {
+          watchlistMode = "potential";
+          renderWatchlist();
+        });
+      }
+
+      async function renderPotentialWatchlist() {
+        const data = await api("/watchlist/potential");
+        const themes = ["All", ...new Set(data.potential_stocks.map((x) => x.theme))];
+        const ratings = ["All", "STRONG CANDIDATE", "WATCH CANDIDATE", "EARLY WATCH", "AVOID / WAIT"];
+        const signals = ["All", ...new Set(data.potential_stocks.map((x) => x.signal))];
+        const filtered = data.potential_stocks.filter((item) => {
+          if (candidateFilters.theme !== "All" && item.theme !== candidateFilters.theme) return false;
+          if (candidateFilters.rating !== "All" && item.candidate_rating !== candidateFilters.rating) return false;
+          if (candidateFilters.signal !== "All" && item.signal !== candidateFilters.signal) return false;
+          if (candidateFilters.volatility === "High only" && !(item.annualized_volatility > 0.60)) return false;
+          if (candidateFilters.volatility === "Hide high" && item.annualized_volatility > 0.60) return false;
+          return true;
+        });
+
+        document.getElementById("watchlist").innerHTML = `
+          <div class="card">
+            <div class="section-head">
+              <div>
+                <h2>Potential Stocks</h2>
+                <p style="margin-top:4px">Only non-held candidates are shown. Current holdings are excluded automatically.</p>
+              </div>
+              <div class="tabs">
+                <button id="priceTab">Price History</button>
+                <button class="active" id="potentialTab">Potential Stocks</button>
+              </div>
+            </div>
+            <div class="filters">
+              <label>Theme
+                <select id="themeFilter">${themes.map((x) => `<option ${x === candidateFilters.theme ? "selected" : ""}>${x}</option>`).join("")}</select>
+              </label>
+              <label>Rating
+                <select id="ratingFilter">${ratings.map((x) => `<option ${x === candidateFilters.rating ? "selected" : ""}>${x}</option>`).join("")}</select>
+              </label>
+              <label>Signal
+                <select id="signalFilter">${signals.map((x) => `<option ${x === candidateFilters.signal ? "selected" : ""}>${x}</option>`).join("")}</select>
+              </label>
+              <label>Volatility
+                <select id="volFilter">
+                  ${["All", "High only", "Hide high"].map((x) => `<option ${x === candidateFilters.volatility ? "selected" : ""}>${x}</option>`).join("")}
+                </select>
+              </label>
+            </div>
+            <div class="content muted">
+              Excluded current holdings: ${data.excluded_current_holdings.join(", ")}
+            </div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Ticker</th><th>Company</th><th>Theme</th><th>Price</th><th>MA50</th><th>MA200</th><th>3M</th><th>6M</th><th>Vol</th><th>Signal</th><th>Score</th><th>Rating</th><th>Entry Zone</th><th>Action</th></tr></thead>
+              <tbody>${filtered.length ? rows(filtered, [
+                (x) => `<b>${x.ticker}</b>`,
+                (x) => x.company_name,
+                (x) => x.theme,
+                (x) => fmtCurrency(x.current_price),
+                (x) => fmtCurrency(x.ma50),
+                (x) => fmtCurrency(x.ma200),
+                (x) => fmtPct(x.momentum_3m),
+                (x) => fmtPct(x.momentum_6m),
+                (x) => `<span class="${x.annualized_volatility > 0.60 ? "bad" : ""}">${fmtPct(x.annualized_volatility)}</span>`,
+                (x) => signalPill(x.signal),
+                (x) => `<b>${x.score}</b>`,
+                (x) => ratingPill(x.candidate_rating),
+                (x) => x.entry_zone,
+                (x) => x.suggested_action
+              ]) : `<tr><td colspan="14" class="empty">No candidates match the selected filters.</td></tr>`}</tbody>
+            </table></div>
+          </div>`;
+
+        document.getElementById("priceTab").addEventListener("click", () => {
+          watchlistMode = "prices";
+          renderWatchlist();
+        });
+        document.getElementById("themeFilter").addEventListener("change", (event) => {
+          candidateFilters.theme = event.target.value;
+          renderPotentialWatchlist();
+        });
+        document.getElementById("ratingFilter").addEventListener("change", (event) => {
+          candidateFilters.rating = event.target.value;
+          renderPotentialWatchlist();
+        });
+        document.getElementById("signalFilter").addEventListener("change", (event) => {
+          candidateFilters.signal = event.target.value;
+          renderPotentialWatchlist();
+        });
+        document.getElementById("volFilter").addEventListener("change", (event) => {
+          candidateFilters.volatility = event.target.value;
+          renderPotentialWatchlist();
         });
       }
 
