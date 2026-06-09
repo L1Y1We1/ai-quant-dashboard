@@ -506,7 +506,8 @@
               <ol>
                 <li>先看 Dashboard：确认组合总值、现金比例、AI 主题曝险和风险告警数量。</li>
                 <li>再看 Signals：找出 buy、reduce、sell，优先处理 sell 和 reduce。</li>
-                <li>打开 Watchlist：选择单只股票，确认价格是否站上 MA50 和 MA200。</li>
+                <li>打开 Watchlist 的 Price History：选择单只股票，确认价格是否站上 MA50 和 MA200。</li>
+                <li>打开 Watchlist 的 Potential Stocks：只看当前没有持有的候选股票，按 score 从高到低挑选观察名单。</li>
                 <li>最后看 Risk：检查单票、高 beta、现金和 AI 主题曝险是否越线。</li>
               </ol>
             </div>
@@ -519,6 +520,7 @@
                 <li>动量：6M momentum 为正，说明过去半年仍在上涨；3M momentum 可用来判断近期是否加速或转弱。</li>
                 <li>波动：volatility 越高，仓位越要克制，尤其是 NVDA、MU、MRVL、VRT、PLTR、TSLA 这类高 beta 名单。</li>
                 <li>仓位：再好的股票也不能单票过重。本系统默认单只股票不超过 15%，高 beta 股票不超过 10%。</li>
+                <li>候选股：如果股票已经在 Portfolio 持仓里，它不会出现在 Potential Stocks；卖出并从持仓移除后，才会重新进入候选池。</li>
               </ol>
             </div>
           </div>
@@ -559,14 +561,62 @@
           </div>
 
           <div class="card manual-block" style="margin-top:12px">
-            <h3>五、一个实用打分框架</h3>
+            <h3>五、Potential Stocks 怎么用</h3>
+            <ol>
+              <li>Potential Stocks 显示的是 AI 基建候选宇宙中“当前未持有”的股票。</li>
+              <li>候选宇宙包括 Core AI Infra、AI Networking、Power / Cooling、Hyperscaler / AI Software、Speculative AI。</li>
+              <li>默认按 score 降序排序，优先看 STRONG CANDIDATE，再看 WATCH CANDIDATE。</li>
+              <li>用 Theme 过滤想看的子赛道，比如 AI Networking 或 Power / Cooling。</li>
+              <li>用 Rating 过滤候选质量；用 Signal 过滤 buy/sell；用 Volatility 找高波动股票或隐藏高波动股票。</li>
+              <li>Entry Zone 用来判断追高风险：Near MA50 support 比 Overextended 更适合找入场点。</li>
+            </ol>
+          </div>
+
+          <div class="card manual-block" style="margin-top:12px">
+            <h3>六、候选股评分规则</h3>
             <ol>
               <li>价格 > MA200：加 2 分；否则减 2 分。</li>
               <li>价格 > MA50：加 1 分；否则减 1 分。</li>
               <li>6M momentum > 0：加 2 分；否则减 2 分。</li>
               <li>3M momentum > 0：加 1 分；否则减 1 分。</li>
-              <li>Volatility 明显高于组合其他股票：减 1 分，并降低目标仓位。</li>
-              <li>如果总分大于等于 4，可列入加仓候选；1 到 3 分偏持有；小于等于 0 分优先观察、减仓或回避。</li>
+              <li>Core AI Infra、AI Networking、Power / Cooling：加 2 分。</li>
+              <li>Speculative AI：减 1 分。</li>
+              <li>年化波动率 > 60%：减 1 分；> 90%：额外减 2 分。</li>
+              <li>价格高于 MA50 超过 20%：减 1 分；价格高于 MA200 超过 35%：减 1 分。</li>
+            </ol>
+          </div>
+
+          <div class="grid manual-grid" style="margin-top:12px">
+            <div class="card manual-block">
+              <h3>七、Rating 和 Action</h3>
+              <ul>
+                <li><b>STRONG CANDIDATE：</b>score >= 5，Consider small starter position。</li>
+                <li><b>WATCH CANDIDATE：</b>score 3 到 4，Wait for better entry or confirmation。</li>
+                <li><b>EARLY WATCH：</b>score 1 到 2，Monitor only。</li>
+                <li><b>AVOID / WAIT：</b>score <= 0，Avoid for now。</li>
+              </ul>
+            </div>
+
+            <div class="card manual-block">
+              <h3>八、Entry Zone 解读</h3>
+              <ul>
+                <li><b>Near MA50 support：</b>价格靠近 MA50，通常是相对更健康的观察区。</li>
+                <li><b>Extended but acceptable：</b>价格略高于 MA50，可继续观察确认。</li>
+                <li><b>Overextended, wait for pullback：</b>价格离 MA50 太远，避免追高。</li>
+                <li><b>Above MA200 but below MA50：</b>长期趋势还在，但中期转弱，等待恢复。</li>
+                <li><b>Below MA200, avoid：</b>长期趋势偏弱，优先回避。</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="card manual-block" style="margin-top:12px">
+            <h3>九、候选股决策流程</h3>
+            <ol>
+              <li>先过滤掉 AVOID / WAIT，只留下 STRONG 或 WATCH。</li>
+              <li>优先选择 AI 基建核心链条：芯片、网络、电力和散热。</li>
+              <li>检查 Entry Zone，避免买入 Overextended 的股票。</li>
+              <li>再回到 Portfolio 和 Risk，确认新增仓位不会让单票、高 beta 或 AI 主题曝险超限。</li>
+              <li>最后才考虑小仓位试探，不把评分当成自动交易指令。</li>
             </ol>
           </div>`;
       }
