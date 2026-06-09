@@ -1,0 +1,11 @@
+.DS_Store
+
+backend/.venv/
+backend/quant.db
+backend/app/__pycache__/
+backend/**/__pycache__/
+
+frontend/node_modules/
+frontend/dist/
+
+*.pyc
