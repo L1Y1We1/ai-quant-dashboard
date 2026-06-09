@@ -38,4 +38,34 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS virtual_account (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                starting_cash REAL NOT NULL,
+                cash REAL NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS virtual_trades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+                shares REAL NOT NULL CHECK (shares > 0),
+                price REAL NOT NULL CHECK (price >= 0),
+                notional REAL NOT NULL CHECK (notional >= 0),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO virtual_account (id, starting_cash, cash)
+            VALUES (1, 100000.0, 100000.0)
+            """
+        )
         conn.commit()

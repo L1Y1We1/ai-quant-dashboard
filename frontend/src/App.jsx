@@ -5,13 +5,15 @@ import Portfolio from "./pages/Portfolio";
 import Signals from "./pages/Signals";
 import Risk from "./pages/Risk";
 import Watchlist from "./pages/Watchlist";
+import VirtualPortfolio from "./pages/VirtualPortfolio";
 
 const pages = [
   { id: "dashboard", label: "Dashboard", icon: Activity, component: Dashboard },
   { id: "portfolio", label: "Portfolio", icon: Briefcase, component: Portfolio },
   { id: "signals", label: "Signals", icon: BarChart3, component: Signals },
   { id: "risk", label: "Risk", icon: Gauge, component: Risk },
-  { id: "watchlist", label: "Watchlist", icon: List, component: Watchlist }
+  { id: "watchlist", label: "Watchlist", icon: List, component: Watchlist },
+  { id: "virtual", label: "虚拟盘", icon: Briefcase, component: VirtualPortfolio }
 ];
 
 export default function App() {

@@ -16,7 +16,13 @@ export const api = {
   signals: () => request("/signals"),
   portfolio: () => request("/portfolio"),
   risk: () => request("/risk"),
-  dailyReport: () => request("/report/daily")
+  dailyReport: () => request("/report/daily"),
+  virtualPortfolio: () => request("/virtual-portfolio"),
+  virtualTrade: (trade) => request("/virtual-portfolio/trade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(trade)
+  })
 };
 
 export const universe = ["QQQ", "NVDA", "AVGO", "TSM", "MU", "MRVL", "VRT", "ANET", "AMZN", "PLTR", "TSLA"];

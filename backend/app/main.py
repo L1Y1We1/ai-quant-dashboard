@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from .config import UNIVERSE
 from .database import init_db
@@ -13,11 +14,18 @@ from .portfolio import get_portfolio
 from .report import get_daily_report
 from .risk import get_risk_report
 from .strategy import get_signals
+from .virtual_portfolio import get_virtual_portfolio, place_virtual_trade
 from .watchlist import candidate_tickers, get_potential_watchlist
 
 
 app = FastAPI(title="AI Infrastructure Quant Platform", version="0.1.0")
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+class VirtualTradeRequest(BaseModel):
+    ticker: str = Field(..., min_length=1)
+    side: str
+    shares: float = Field(..., gt=0)
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,3 +88,16 @@ def daily_report() -> dict:
 @app.get("/watchlist/potential")
 def potential_watchlist() -> dict:
     return get_potential_watchlist()
+
+
+@app.get("/virtual-portfolio")
+def virtual_portfolio() -> dict:
+    return get_virtual_portfolio()
+
+
+@app.post("/virtual-portfolio/trade")
+def virtual_trade(trade: VirtualTradeRequest) -> dict:
+    try:
+        return place_virtual_trade(trade.ticker, trade.side, trade.shares)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
