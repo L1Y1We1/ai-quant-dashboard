@@ -76,7 +76,7 @@ def startup() -> None:
 
 @app.get("/", include_in_schema=False)
 def root() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store, max-age=0"})
 
 
 @app.post("/auth/register")
@@ -112,6 +112,8 @@ def register(payload: RegisterRequest) -> dict:
 @app.post("/auth/login")
 def login(payload: LoginRequest) -> dict:
     identity = payload.username_or_email.strip().lower()
+    if not identity:
+        raise HTTPException(status_code=400, detail="Please enter email or username")
     with get_connection() as conn:
         row = conn.execute(
             """
@@ -121,8 +123,10 @@ def login(payload: LoginRequest) -> dict:
             """,
             (identity, identity),
         ).fetchone()
-    if not row or not verify_password(payload.password, row["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid username/email or password")
+    if not row:
+        raise HTTPException(status_code=404, detail="Account not found. If the app was recently redeployed, please register again.")
+    if not verify_password(payload.password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Password is incorrect.")
     user = public_user(row)
     return {"token": create_token(user), "user": user}
 

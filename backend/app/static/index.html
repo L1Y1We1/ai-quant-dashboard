@@ -390,6 +390,12 @@
         return "avoid";
       };
       const ratingPill = (rating) => `<span class="rating ${ratingClass(rating)}">${rating}</span>`;
+      const authErrorMessage = (message) => {
+        if (message.includes("Account not found")) return "账号不存在。Render 重新部署后本地 SQLite 账号可能会清空，请切到 Register 重新注册。";
+        if (message.includes("Password is incorrect")) return "密码不正确，请重新输入。";
+        if (message.includes("Please enter")) return "请输入 email 或 username。";
+        return message;
+      };
 
       function setActive(page) {
         if (page === "logout") {
@@ -496,7 +502,7 @@
             });
             await finishAuth(result);
           } catch (error) {
-            renderAuth(`登录失败：${error.message}`);
+            renderAuth(`登录失败：${authErrorMessage(error.message)}`);
           }
         });
         if (isRegister) document.getElementById("registerForm").addEventListener("submit", async (event) => {

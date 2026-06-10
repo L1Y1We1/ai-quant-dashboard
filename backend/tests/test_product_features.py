@@ -88,6 +88,16 @@ class ProductFeatureTests(unittest.TestCase):
         self.assertEqual(recommendations.status_code, 200, recommendations.text)
         self.assertIn("recommendations", recommendations.json())
 
+    def test_login_errors_are_specific(self) -> None:
+        missing = self.client.post("/auth/login", json={"username_or_email": "missing@example.com", "password": "secret123"})
+        self.assertEqual(missing.status_code, 404)
+        self.assertIn("Account not found", missing.json()["detail"])
+
+        self.auth_headers("wrongpass", "wrongpass@example.com")
+        wrong_password = self.client.post("/auth/login", json={"username_or_email": "wrongpass@example.com", "password": "badpass123"})
+        self.assertEqual(wrong_password.status_code, 401)
+        self.assertEqual(wrong_password.json()["detail"], "Password is incorrect.")
+
     def test_virtual_account_trade_performance_and_leaderboard(self) -> None:
         user = self.auth_headers("carol", "carol@example.com")
         account = self.client.get("/virtual/account", headers=user)
