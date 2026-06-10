@@ -5,7 +5,7 @@ import { ErrorState, Loading } from "../components/DataState";
 import Metric from "../components/Metric";
 
 export default function VirtualPortfolio() {
-  const [trade, setTrade] = useState({ ticker: "ALAB", side: "buy", shares: 1 });
+  const [trade, setTrade] = useState({ ticker: "ALAB", side: "buy", quantity: 1, notes: "" });
   const [message, setMessage] = useState("");
   const { data, error, loading, setData } = useApi(async () => {
     const [portfolio, health] = await Promise.all([api.virtualPortfolio(), api.health()]);
@@ -15,10 +15,13 @@ export default function VirtualPortfolio() {
   async function submitTrade(event) {
     event.preventDefault();
     try {
-      const result = await api.virtualTrade({ ...trade, shares: Number(trade.shares) });
+      const normalizedTicker = trade.ticker.trim().toUpperCase();
+      if (!/^[A-Z0-9.-]+$/.test(normalizedTicker)) throw new Error("Invalid ticker or no market data found.");
+      const lookup = await api.tickerLookup(normalizedTicker);
+      const result = await api.virtualTrade({ ...trade, ticker: normalizedTicker, quantity: Number(trade.quantity), price: lookup.current_price });
       const health = await api.health();
       setData({ ...result.portfolio, tickers: [...new Set([...(health.universe || []), ...(health.candidate_universe || [])])].sort() });
-      setMessage(`Submitted ${trade.side.toUpperCase()} ${trade.shares} ${trade.ticker}`);
+      setMessage(`Submitted ${trade.side.toUpperCase()} ${trade.quantity} ${normalizedTicker}`);
     } catch (err) {
       setMessage(err.message);
     }
@@ -43,13 +46,13 @@ export default function VirtualPortfolio() {
         </div>
         <form onSubmit={submitTrade} className="grid gap-3 border-b border-line bg-panel p-4 md:grid-cols-[1fr_1fr_1fr_auto]">
           <select value={trade.ticker} onChange={(event) => setTrade({ ...trade, ticker: event.target.value })} className="border border-line bg-white px-3 py-2 text-sm">
-            {data.tickers.map((ticker) => <option key={ticker}>{ticker}</option>)}
-          </select>
+          <input value={trade.ticker} onChange={(event) => setTrade({ ...trade, ticker: event.target.value.toUpperCase().trim() })} className="border border-line bg-white px-3 py-2 text-sm" />
           <select value={trade.side} onChange={(event) => setTrade({ ...trade, side: event.target.value })} className="border border-line bg-white px-3 py-2 text-sm">
             <option value="buy">Buy</option>
             <option value="sell">Sell</option>
           </select>
-          <input value={trade.shares} onChange={(event) => setTrade({ ...trade, shares: event.target.value })} type="number" min="0.0001" step="0.0001" className="border border-line bg-white px-3 py-2 text-sm" />
+          <input value={trade.quantity} onChange={(event) => setTrade({ ...trade, quantity: event.target.value })} type="number" min="0.0001" step="0.0001" className="border border-line bg-white px-3 py-2 text-sm" />
+          <input value={trade.notes} onChange={(event) => setTrade({ ...trade, notes: event.target.value })} placeholder="notes" className="border border-line bg-white px-3 py-2 text-sm" />
           <button className="border border-ink bg-ink px-4 py-2 text-sm font-semibold text-white">Submit</button>
         </form>
         {message && <div className="border-b border-line px-4 py-3 text-sm text-slate-600">{message}</div>}

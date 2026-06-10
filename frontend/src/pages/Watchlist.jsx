@@ -3,6 +3,7 @@ import { api, universe } from "../api";
 import { currency, percent, useApi } from "../hooks";
 import { ErrorState, Loading } from "../components/DataState";
 import SignalPill from "../components/SignalPill";
+import { getTickerColor } from "../tickerColor";
 
 const ratingStyles = {
   "STRONG CANDIDATE": "border-emerald-200 bg-emerald-100 text-emerald-800",
@@ -91,7 +92,7 @@ export default function Watchlist() {
       {tab === "potential" && data && (
         <section className="border border-line bg-white">
           <div className="border-b border-line px-4 py-3">
-            <p className="text-sm text-slate-600">Only non-held candidates are shown. Excluded current holdings: {data.excluded_current_holdings.join(", ")}</p>
+            <p className="text-sm text-slate-600">Candidate universe includes held and non-held tickers. Held names are marked with a HELD badge.</p>
           </div>
           <div className="grid gap-3 border-b border-line bg-panel p-4 md:grid-cols-4">
             <select value={filters.theme} onChange={(event) => setFilters({ ...filters, theme: event.target.value })} className="border border-line bg-white px-3 py-2 text-sm">
@@ -122,6 +123,8 @@ export default function Watchlist() {
                   <th className="px-4 py-3">Vol.</th>
                   <th className="px-4 py-3">Signal</th>
                   <th className="px-4 py-3">Score</th>
+                  <th className="px-4 py-3">Current</th>
+                  <th className="px-4 py-3">Target</th>
                   <th className="px-4 py-3">Rating</th>
                   <th className="px-4 py-3">Entry Zone</th>
                   <th className="px-4 py-3">Action</th>
@@ -130,7 +133,7 @@ export default function Watchlist() {
               <tbody>
                 {filtered.map((row) => (
                   <tr key={row.ticker} className="border-t border-line">
-                    <td className="px-4 py-3 font-semibold">{row.ticker}</td>
+                    <td className={`px-4 py-3 font-semibold ${getTickerColor(row.score)}`}>{row.ticker}{row.is_current_holding && <span className="ml-2 border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800">HELD</span>}</td>
                     <td className="px-4 py-3">{row.company_name}</td>
                     <td className="px-4 py-3">{row.theme}</td>
                     <td className="px-4 py-3">{currency(row.current_price)}</td>
@@ -141,6 +144,8 @@ export default function Watchlist() {
                     <td className={row.annualized_volatility > 0.6 ? "px-4 py-3 text-loss" : "px-4 py-3"}>{percent(row.annualized_volatility)}</td>
                     <td className="px-4 py-3"><SignalPill signal={row.signal} /></td>
                     <td className="px-4 py-3 font-semibold">{row.score}</td>
+                    <td className="px-4 py-3">{percent(row.current_weight)}</td>
+                    <td className="px-4 py-3">{percent(row.target_weight)}</td>
                     <td className="px-4 py-3"><RatingPill rating={row.candidate_rating} /></td>
                     <td className="px-4 py-3">{row.entry_zone}</td>
                     <td className="px-4 py-3">{row.suggested_action}</td>

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .market_data import latest_market_snapshot
-from .portfolio import get_current_holding_tickers
+from .portfolio import get_holding_lookup
 from .strategy import classify_signal
 
 
@@ -41,9 +41,8 @@ def candidate_tickers() -> list[str]:
     return [candidate.ticker for candidate in CANDIDATE_UNIVERSE]
 
 
-def potential_candidate_tickers() -> list[str]:
-    held = get_current_holding_tickers()
-    return [candidate.ticker for candidate in CANDIDATE_UNIVERSE if candidate.ticker not in held]
+def candidate_lookup() -> dict[str, CandidateStock]:
+    return {candidate.ticker: candidate for candidate in CANDIDATE_UNIVERSE}
 
 
 def _score_candidate(candidate: CandidateStock, row: dict) -> tuple[int, list[str]]:
@@ -147,60 +146,71 @@ def _entry_zone(row: dict) -> str:
     return "Wait for clearer setup"
 
 
-def get_potential_watchlist() -> dict:
-    held = get_current_holding_tickers()
-    candidates = [candidate for candidate in CANDIDATE_UNIVERSE if candidate.ticker not in held]
+def build_candidate_item(candidate: CandidateStock, row: dict | None, holding: dict | None = None) -> dict:
+    is_holding = holding is not None
+    current_weight = holding.get("current_weight", 0) if holding else 0
+    target_weight = holding.get("target_weight", 0) if holding else 0
+    if not row:
+        return {
+            "ticker": candidate.ticker,
+            "company_name": candidate.company_name,
+            "theme": candidate.theme,
+            "current_price": None,
+            "ma50": None,
+            "ma200": None,
+            "momentum_3m": None,
+            "momentum_6m": None,
+            "annualized_volatility": None,
+            "score": None,
+            "candidate_rating": "AVOID / WAIT",
+            "suggested_action": "Avoid for now",
+            "entry_zone": "Insufficient data",
+            "signal": "unknown",
+            "is_current_holding": is_holding,
+            "current_weight": current_weight,
+            "target_weight": target_weight,
+            "reason": "No downloaded market data yet. Refresh market data to score this candidate.",
+        }
+
+    score, reasons = _score_candidate(candidate, row)
+    rating = _rating(score)
+    return {
+        "ticker": candidate.ticker,
+        "company_name": candidate.company_name,
+        "theme": candidate.theme,
+        "current_price": row["close"],
+        "ma50": row["ma50"],
+        "ma200": row["ma200"],
+        "momentum_3m": row["momentum_3m"],
+        "momentum_6m": row["momentum_6m"],
+        "annualized_volatility": row["volatility"],
+        "score": score,
+        "candidate_rating": rating,
+        "suggested_action": _suggested_action(rating),
+        "entry_zone": _entry_zone(row),
+        "signal": classify_signal(row),
+        "is_current_holding": is_holding,
+        "current_weight": current_weight,
+        "target_weight": target_weight,
+        "reason": " ".join(reasons),
+    }
+
+
+def get_potential_watchlist(user_id: int, portfolio: dict | None = None) -> dict:
+    candidates = CANDIDATE_UNIVERSE
     snapshots = {row["ticker"]: row for row in latest_market_snapshot([candidate.ticker for candidate in candidates])}
+    holdings = {}
+    if portfolio:
+        holdings = {row["ticker"]: row for row in portfolio["holdings"]}
+    else:
+        holdings = get_holding_lookup(user_id)
     items = []
 
     for candidate in candidates:
         row = snapshots.get(candidate.ticker)
-        if not row:
-            items.append(
-                {
-                    "ticker": candidate.ticker,
-                    "company_name": candidate.company_name,
-                    "theme": candidate.theme,
-                    "current_price": None,
-                    "ma50": None,
-                    "ma200": None,
-                    "momentum_3m": None,
-                    "momentum_6m": None,
-                    "annualized_volatility": None,
-                    "score": -99,
-                    "candidate_rating": "AVOID / WAIT",
-                    "suggested_action": "Avoid for now",
-                    "entry_zone": "Insufficient data",
-                    "signal": "unknown",
-                    "reason": "No downloaded market data yet. Refresh market data to score this candidate.",
-                }
-            )
-            continue
-
-        score, reasons = _score_candidate(candidate, row)
-        rating = _rating(score)
-        items.append(
-            {
-                "ticker": candidate.ticker,
-                "company_name": candidate.company_name,
-                "theme": candidate.theme,
-                "current_price": row["close"],
-                "ma50": row["ma50"],
-                "ma200": row["ma200"],
-                "momentum_3m": row["momentum_3m"],
-                "momentum_6m": row["momentum_6m"],
-                "annualized_volatility": row["volatility"],
-                "score": score,
-                "candidate_rating": rating,
-                "suggested_action": _suggested_action(rating),
-                "entry_zone": _entry_zone(row),
-                "signal": classify_signal(row),
-                "reason": " ".join(reasons),
-            }
-        )
+        items.append(build_candidate_item(candidate, row, holdings.get(candidate.ticker)))
 
     return {
-        "excluded_current_holdings": sorted(held),
         "candidate_universe": [candidate.__dict__ for candidate in CANDIDATE_UNIVERSE],
-        "potential_stocks": sorted(items, key=lambda item: item["score"], reverse=True),
+        "potential_stocks": sorted(items, key=lambda item: item["score"] if item["score"] is not None else -999, reverse=True),
     }

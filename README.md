@@ -69,12 +69,86 @@ VITE_API_BASE_URL=http://localhost:8000 npm run dev
 
 ## API Endpoints
 
+- `POST /auth/register` - create a user and receive a JWT
+- `POST /auth/login` - log in and receive a JWT
+- `POST /auth/logout` - client-side logout helper
+- `GET /auth/me` - current authenticated user
 - `GET /prices/{ticker}` - daily price history with indicators
 - `POST /data/refresh` - download daily price history from yfinance
 - `GET /signals` - current strategy signals for the universe
 - `GET /portfolio` - holdings, prices, values, and target weights
+- `POST /portfolio/holdings` - add or update an authenticated user's holding
+- `DELETE /portfolio/holdings/{ticker}` - remove an authenticated user's holding
 - `GET /risk` - risk rules, exposure summary, and warnings
 - `GET /report/daily` - daily portfolio and signal report
+- `GET /watchlist/potential` - scored AI infrastructure candidates, including held tickers
+- `GET /virtual-portfolio` - authenticated user's paper trading account
+- `POST /virtual-portfolio/trade` - create a paper buy/sell order
+- `GET /ticker/{ticker}/lookup` - latest ticker price, company name, signal, and score where available
+
+Authenticated endpoints require:
+
+```text
+Authorization: Bearer <jwt>
+```
+
+## User Accounts
+
+The app has a simple JWT account system. Register in the UI or call:
+
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","email":"demo@example.com","password":"secret123"}'
+```
+
+Then log in:
+
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username_or_email":"demo","password":"secret123"}'
+```
+
+Each user has private data for:
+
+- Portfolio holdings
+- Virtual paper trades
+- Watchlist notes
+
+Market data, prices, indicators, signals, and candidate scores are shared globally.
+
+New users are seeded with the sample AI infrastructure portfolio. Holdings control the `is_current_holding`, `current_weight`, and `target_weight` fields in `GET /watchlist/potential`.
+
+Manage holdings through the API:
+
+```bash
+curl -X POST http://localhost:8000/portfolio/holdings \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"ticker":"MSFT","shares":5,"target_weight":0.05}'
+
+curl -X DELETE http://localhost:8000/portfolio/holdings/MSFT \
+  -H "Authorization: Bearer <jwt>"
+```
+
+## Virtual Paper Trading
+
+The virtual account starts with `$100,000` cash per user. It does not connect to a broker.
+
+Trade payload:
+
+```json
+{
+  "ticker": "ALAB",
+  "side": "BUY",
+  "quantity": 1,
+  "price": 0,
+  "notes": "starter test"
+}
+```
+
+The backend validates ticker format and market data availability, then uses the latest downloaded price for execution.
 
 ## Deploy Online
 

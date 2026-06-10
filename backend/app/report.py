@@ -8,10 +8,10 @@ from .risk import get_risk_report
 from .strategy import get_signals
 
 
-def get_daily_report() -> dict:
+def get_daily_report(user_id: int) -> dict:
     signals = get_signals()
-    risk = get_risk_report()
-    portfolio = get_portfolio()
+    risk = get_risk_report(user_id)
+    portfolio = get_portfolio(user_id)
     signal_counts: dict[str, int] = {}
     for item in signals:
         signal_counts[item["signal"]] = signal_counts.get(item["signal"], 0) + 1

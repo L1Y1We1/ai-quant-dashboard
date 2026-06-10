@@ -8,8 +8,8 @@ def _pct(value: float) -> float:
     return round(value * 100, 2)
 
 
-def get_risk_report() -> dict:
-    portfolio = get_portfolio()
+def get_risk_report(user_id: int) -> dict:
+    portfolio = get_portfolio(user_id)
     holdings = portfolio["holdings"]
     total_value = portfolio["total_value"]
     cash_weight = portfolio["cash"] / total_value if total_value else 0

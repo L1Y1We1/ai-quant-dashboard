@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from .database import get_connection
 from .market_data import latest_market_snapshot
 
@@ -11,15 +13,39 @@ def _current_price(ticker: str) -> float | None:
     return rows[0]["close"]
 
 
-def _position_lots() -> dict[str, dict]:
+TICKER_RE = re.compile(r"^[A-Z0-9.-]+$")
+
+
+def normalize_ticker(ticker: str) -> str:
+    normalized = ticker.strip().upper()
+    if not normalized or not TICKER_RE.match(normalized):
+        raise ValueError("Invalid ticker or no market data found.")
+    return normalized
+
+
+def ensure_virtual_account(user_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO virtual_accounts (user_id, starting_cash, cash)
+            VALUES (?, 100000.0, 100000.0)
+            """,
+            (user_id,),
+        )
+        conn.commit()
+
+
+def _position_lots(user_id: int) -> dict[str, dict]:
     lots: dict[str, dict] = {}
     with get_connection() as conn:
         trades = conn.execute(
             """
             SELECT ticker, side, shares, price, notional, created_at
             FROM virtual_trades
+            WHERE user_id = ?
             ORDER BY id
-            """
+            """,
+            (user_id,),
         ).fetchall()
 
     for trade in trades:
@@ -39,21 +65,24 @@ def _position_lots() -> dict[str, dict]:
     return {ticker: pos for ticker, pos in lots.items() if pos["shares"] > 0.000001}
 
 
-def get_virtual_portfolio() -> dict:
+def get_virtual_portfolio(user_id: int) -> dict:
+    ensure_virtual_account(user_id)
     with get_connection() as conn:
-        account = conn.execute("SELECT starting_cash, cash FROM virtual_account WHERE id = 1").fetchone()
+        account = conn.execute("SELECT starting_cash, cash FROM virtual_accounts WHERE user_id = ?", (user_id,)).fetchone()
         trades = conn.execute(
             """
-            SELECT id, ticker, side, shares, price, notional, created_at
+            SELECT id, ticker, side, shares, price, notional, notes, created_at
             FROM virtual_trades
+            WHERE user_id = ?
             ORDER BY id DESC
             LIMIT 30
-            """
+            """,
+            (user_id,),
         ).fetchall()
 
     positions = []
     total_market_value = 0.0
-    for position in _position_lots().values():
+    for position in _position_lots(user_id).values():
         price = _current_price(position["ticker"])
         market_value = position["shares"] * price if price is not None else 0.0
         avg_cost = position["cost_basis"] / position["shares"] if position["shares"] else 0.0
@@ -88,53 +117,54 @@ def get_virtual_portfolio() -> dict:
     }
 
 
-def place_virtual_trade(ticker: str, side: str, shares: float) -> dict:
-    ticker = ticker.upper()
+def place_virtual_trade(user_id: int, ticker: str, side: str, quantity: float, notes: str | None = None) -> dict:
+    ensure_virtual_account(user_id)
+    ticker = normalize_ticker(ticker)
     side = side.lower()
     if side not in {"buy", "sell"}:
         raise ValueError("side must be buy or sell")
-    if shares <= 0:
-        raise ValueError("shares must be greater than 0")
+    if quantity <= 0:
+        raise ValueError("quantity must be greater than 0")
 
     price = _current_price(ticker)
     if price is None:
-        raise ValueError(f"No market data for {ticker}. Refresh data before trading.")
-    notional = price * shares
+        raise ValueError("Invalid ticker or no market data found.")
+    notional = price * quantity
 
     with get_connection() as conn:
-        account = conn.execute("SELECT cash FROM virtual_account WHERE id = 1").fetchone()
+        account = conn.execute("SELECT cash FROM virtual_accounts WHERE user_id = ?", (user_id,)).fetchone()
         cash = account["cash"]
-        positions = _position_lots()
+        positions = _position_lots(user_id)
         owned_shares = positions.get(ticker, {}).get("shares", 0.0)
 
         if side == "buy" and notional > cash:
             raise ValueError("Not enough virtual cash for this buy order.")
-        if side == "sell" and shares > owned_shares:
+        if side == "sell" and quantity > owned_shares:
             raise ValueError("Not enough virtual shares for this sell order.")
 
         new_cash = cash - notional if side == "buy" else cash + notional
         conn.execute(
             """
-            INSERT INTO virtual_trades (ticker, side, shares, price, notional)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO virtual_trades (user_id, ticker, side, shares, price, notional, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (ticker, side, shares, price, notional),
+            (user_id, ticker, side, quantity, price, notional, notes),
         )
         conn.execute(
             """
-            UPDATE virtual_account
+            UPDATE virtual_accounts
             SET cash = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = 1
+            WHERE user_id = ?
             """,
-            (new_cash,),
+            (new_cash, user_id),
         )
         conn.commit()
 
     return {
         "ticker": ticker,
         "side": side,
-        "shares": shares,
+        "quantity": quantity,
         "price": price,
         "notional": notional,
-        "portfolio": get_virtual_portfolio(),
+        "portfolio": get_virtual_portfolio(user_id),
     }
