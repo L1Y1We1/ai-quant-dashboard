@@ -15,6 +15,16 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+def database_status() -> dict:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return {
+        "path": str(DB_PATH),
+        "exists": DB_PATH.exists(),
+        "size_bytes": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
+        "parent_writable": os.access(DB_PATH.parent, os.W_OK),
+    }
+
+
 def init_db() -> None:
     with get_connection() as conn:
         conn.execute(

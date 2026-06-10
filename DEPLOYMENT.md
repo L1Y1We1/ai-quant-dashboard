@@ -16,14 +16,35 @@ This app is now deployment-ready as a single FastAPI web service. The backend se
    QUANT_DB_PATH=/data/quant.db
    ```
 
-5. If you want SQLite data to persist across deploys, add a persistent disk mounted at:
+5. To make SQLite data persist across deploys, add a persistent disk mounted at:
 
    ```text
    /data
    ```
 
+   Recommended settings:
+
+   ```text
+   Disk name: quant-data
+   Mount path: /data
+   Size: 1 GB or larger
+   ```
+
+   Only files under the disk mount path are preserved by Render, so the SQLite database must live at `/data/quant.db`.
+
 6. Deploy.
-7. Open your public Render URL and click `刷新市场数据`.
+7. Open `/health` on your Render URL and confirm:
+
+   ```json
+   "database": {
+     "path": "/data/quant.db",
+     "parent_writable": true
+   }
+   ```
+
+8. Open your public Render URL and click `刷新市场数据`.
+
+This repository also includes `render.yaml` with the same disk and environment variable settings for Blueprint-based Render configuration.
 
 ## Railway
 

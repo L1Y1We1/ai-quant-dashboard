@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ai-quant-dashboard-154r
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    disk:
+      name: quant-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: QUANT_DB_PATH
+        value: /data/quant.db
+      - key: JWT_SECRET
+        generateValue: true

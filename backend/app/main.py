@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from .auth import create_token, get_current_user, hash_password, public_user, verify_password
 from .config import UNIVERSE
-from .database import get_connection, init_db
+from .database import database_status, get_connection, init_db
 from .market_data import data_status, ensure_price_history, get_price_history, latest_market_snapshot, refresh_prices
 from .portfolio import get_portfolio, seed_default_portfolio
 from .report import get_daily_report
@@ -143,7 +143,13 @@ def me(user: dict = Depends(get_current_user)) -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "universe": UNIVERSE, "candidate_universe": candidate_tickers(), "data": data_status()}
+    return {
+        "status": "ok",
+        "universe": UNIVERSE,
+        "candidate_universe": candidate_tickers(),
+        "data": data_status(),
+        "database": database_status(),
+    }
 
 
 @app.post("/data/refresh")

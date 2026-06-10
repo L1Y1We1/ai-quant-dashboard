@@ -241,8 +241,10 @@ Recommended quick path:
 1. Push the project to GitHub.
 2. Create a Docker-based web service on Render, Railway, or Fly.io.
 3. Set `QUANT_DB_PATH=/data/quant.db`.
-4. Add a persistent disk or volume mounted at `/data` if you want SQLite data to survive redeploys.
+4. Add a persistent disk or volume mounted at `/data` so SQLite data survives redeploys.
 5. Deploy and open the generated public URL.
+
+After deployment, open `/health` and confirm the database path is `/data/quant.db` and `parent_writable` is `true`.
 
 See `DEPLOYMENT.md` for platform-specific notes.
 
