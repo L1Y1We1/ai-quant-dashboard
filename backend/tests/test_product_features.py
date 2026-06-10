@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.database import get_connection, init_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.market_data import refresh_universe  # noqa: E402
 
 
 def seed_prices() -> None:
@@ -102,6 +103,19 @@ class ProductFeatureTests(unittest.TestCase):
 
         leaderboard = self.client.get("/virtual/leaderboard").json()["leaderboard"]
         self.assertTrue(any(row["username"] == "carol" for row in leaderboard))
+
+    def test_refresh_universe_includes_user_added_holdings(self) -> None:
+        user = self.auth_headers("dana", "dana@example.com")
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO portfolio_holdings (user_id, ticker, shares, target_weight)
+                VALUES ((SELECT id FROM users WHERE username = 'dana'), 'DDOG', 3, 0.04)
+                """
+            )
+            conn.commit()
+
+        self.assertIn("DDOG", refresh_universe())
 
 
 if __name__ == "__main__":

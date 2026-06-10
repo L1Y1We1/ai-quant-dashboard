@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime
 
 from .database import get_connection
-from .market_data import latest_market_snapshot
+from .market_data import ensure_price_history, latest_market_snapshot
 
 
 def _current_price(ticker: str) -> float | None:
@@ -191,6 +191,8 @@ def place_virtual_trade(user_id: int, ticker: str, side: str, quantity: float, n
         raise ValueError("quantity must be greater than 0")
 
     price = _current_price(ticker)
+    if price is None and ensure_price_history(ticker):
+        price = _current_price(ticker)
     if price is None:
         raise ValueError("Invalid ticker or no market data found.")
     notional = price * quantity

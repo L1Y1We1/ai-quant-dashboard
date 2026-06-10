@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from .auth import create_token, get_current_user, hash_password, public_user, verify_password
 from .config import UNIVERSE
 from .database import get_connection, init_db
-from .market_data import data_status, get_price_history, latest_market_snapshot, refresh_prices
+from .market_data import data_status, ensure_price_history, get_price_history, latest_market_snapshot, refresh_prices
 from .portfolio import get_portfolio, seed_default_portfolio
 from .report import get_daily_report
 from .recommendations import get_buy_recommendations
@@ -149,10 +149,10 @@ def refresh_data() -> dict:
 
 @app.get("/prices/{ticker}")
 def prices(ticker: str, limit: int = 260) -> dict:
-    ticker = ticker.upper()
-    if ticker not in UNIVERSE:
-        raise HTTPException(status_code=404, detail=f"{ticker} is not in the tracked universe.")
+    ticker = ticker.strip().upper()
     rows = get_price_history(ticker, limit)
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"{ticker} has no downloaded market data. Add it to a portfolio or refresh market data.")
     return {"ticker": ticker, "count": len(rows), "prices": rows}
 
 
@@ -171,6 +171,8 @@ def upsert_holding(holding: HoldingRequest, user: dict = Depends(get_current_use
     ticker = holding.ticker.strip().upper()
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker is required")
+    if not ensure_price_history(ticker):
+        raise HTTPException(status_code=400, detail="Ticker not found or market data unavailable.")
     with get_connection() as conn:
         conn.execute(
             """
@@ -258,6 +260,8 @@ def ticker_lookup(ticker: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     rows = latest_market_snapshot([ticker])
+    if not rows and ensure_price_history(ticker):
+        rows = latest_market_snapshot([ticker])
     if not rows:
         raise HTTPException(status_code=404, detail="Invalid ticker or no market data found.")
     row = rows[0]

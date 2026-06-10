@@ -28,6 +28,26 @@ PRICE_COLUMNS = [
 ]
 
 
+def dynamic_user_tickers() -> set[str]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT ticker FROM portfolio_holdings WHERE shares > 0
+            UNION
+            SELECT ticker FROM virtual_trades
+            UNION
+            SELECT ticker FROM watchlist_notes
+            """
+        ).fetchall()
+    return {row["ticker"].upper() for row in rows if row["ticker"]}
+
+
+def refresh_universe() -> list[str]:
+    from .watchlist import candidate_tickers
+
+    return sorted(set(UNIVERSE) | set(candidate_tickers()) | dynamic_user_tickers())
+
+
 def _normalize_download(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
     if isinstance(raw.columns, pd.MultiIndex):
         raw = raw.copy()
@@ -44,9 +64,7 @@ def _normalize_download(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
 
 def refresh_prices(tickers: list[str] | None = None, period: str = "3y") -> dict[str, int]:
     if tickers is None:
-        from .watchlist import candidate_tickers
-
-        tickers = sorted(set(UNIVERSE) | set(candidate_tickers()))
+        tickers = refresh_universe()
     tickers = tickers or UNIVERSE
     saved: dict[str, int] = {}
 
@@ -74,6 +92,14 @@ def refresh_prices(tickers: list[str] | None = None, period: str = "3y") -> dict
         conn.commit()
 
     return saved
+
+
+def ensure_price_history(ticker: str) -> bool:
+    ticker = ticker.upper()
+    if latest_market_snapshot([ticker]):
+        return True
+    saved = refresh_prices([ticker])
+    return saved.get(ticker, 0) > 0
 
 
 def get_price_history(ticker: str, limit: int = 260) -> list[dict]:
