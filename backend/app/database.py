@@ -35,7 +35,11 @@ def init_db() -> None:
                 user_id INTEGER NOT NULL,
                 ticker TEXT NOT NULL,
                 shares REAL NOT NULL DEFAULT 0,
+                average_cost REAL NOT NULL DEFAULT 0,
                 target_weight REAL NOT NULL DEFAULT 0,
+                theme TEXT,
+                is_high_beta INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id, ticker),
@@ -43,6 +47,10 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_column(conn, "portfolio_holdings", "average_cost", "REAL NOT NULL DEFAULT 0")
+        _ensure_column(conn, "portfolio_holdings", "theme", "TEXT")
+        _ensure_column(conn, "portfolio_holdings", "is_high_beta", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "portfolio_holdings", "notes", "TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS virtual_accounts (

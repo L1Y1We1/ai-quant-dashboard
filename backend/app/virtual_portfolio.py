@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 
 from .database import get_connection
 from .market_data import latest_market_snapshot
@@ -35,8 +36,9 @@ def ensure_virtual_account(user_id: int) -> None:
         conn.commit()
 
 
-def _position_lots(user_id: int) -> dict[str, dict]:
+def _positions_and_realized(user_id: int) -> tuple[dict[str, dict], float]:
     lots: dict[str, dict] = {}
+    realized_pnl = 0.0
     with get_connection() as conn:
         trades = conn.execute(
             """
@@ -59,10 +61,17 @@ def _position_lots(user_id: int) -> dict[str, dict]:
             if position["shares"] <= 0:
                 continue
             sell_ratio = min(trade["shares"], position["shares"]) / position["shares"]
+            cost_removed = position["cost_basis"] * sell_ratio
+            realized_pnl += trade["notional"] - cost_removed
             position["cost_basis"] *= 1 - sell_ratio
             position["shares"] -= trade["shares"]
 
-    return {ticker: pos for ticker, pos in lots.items() if pos["shares"] > 0.000001}
+    return {ticker: pos for ticker, pos in lots.items() if pos["shares"] > 0.000001}, realized_pnl
+
+
+def _position_lots(user_id: int) -> dict[str, dict]:
+    positions, _realized_pnl = _positions_and_realized(user_id)
+    return positions
 
 
 def get_virtual_portfolio(user_id: int) -> dict:
@@ -82,11 +91,14 @@ def get_virtual_portfolio(user_id: int) -> dict:
 
     positions = []
     total_market_value = 0.0
-    for position in _position_lots(user_id).values():
+    lots, realized_pnl = _positions_and_realized(user_id)
+    unrealized_pnl_total = 0.0
+    for position in lots.values():
         price = _current_price(position["ticker"])
         market_value = position["shares"] * price if price is not None else 0.0
         avg_cost = position["cost_basis"] / position["shares"] if position["shares"] else 0.0
         unrealized_pnl = market_value - position["cost_basis"]
+        unrealized_pnl_total += unrealized_pnl
         total_market_value += market_value
         positions.append(
             {
@@ -112,9 +124,61 @@ def get_virtual_portfolio(user_id: int) -> dict:
         "total_value": total_value,
         "total_return": total_value - account["starting_cash"],
         "total_return_pct": (total_value - account["starting_cash"]) / account["starting_cash"] if account["starting_cash"] else 0,
+        "realized_pnl": realized_pnl,
+        "unrealized_pnl": unrealized_pnl_total,
         "positions": sorted(positions, key=lambda item: item["market_value"], reverse=True),
         "recent_trades": [dict(row) for row in trades],
     }
+
+
+def get_virtual_performance(user_id: int) -> dict:
+    portfolio = get_virtual_portfolio(user_id)
+    with get_connection() as conn:
+        dates = conn.execute(
+            """
+            SELECT MIN(created_at) AS first_trade_date, MAX(created_at) AS last_trade_date
+            FROM virtual_trades
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+    first_trade_date = dates["first_trade_date"] if dates else None
+    last_trade_date = dates["last_trade_date"] if dates else None
+    active_days = 0
+    if first_trade_date:
+        first_date = datetime.fromisoformat(first_trade_date.split(" ")[0]).date()
+        active_days = max((date.today() - first_date).days, 1)
+    total_profit = portfolio["total_value"] - portfolio["starting_cash"]
+    return {
+        "starting_virtual_cash": portfolio["starting_cash"],
+        "current_virtual_equity": portfolio["total_value"],
+        "total_profit": total_profit,
+        "total_profit_pct": total_profit / portfolio["starting_cash"] if portfolio["starting_cash"] else 0,
+        "realized_pnl": portfolio["realized_pnl"],
+        "unrealized_pnl": portfolio["unrealized_pnl"],
+        "first_trade_date": first_trade_date,
+        "last_trade_date": last_trade_date,
+        "active_days": active_days,
+        "profit_per_day": total_profit / active_days if active_days else 0,
+    }
+
+
+def get_virtual_leaderboard(sort_by: str = "total_profit_pct") -> dict:
+    allowed_sorts = {"total_profit", "total_profit_pct", "profit_per_day", "active_days"}
+    sort_key = sort_by if sort_by in allowed_sorts else "total_profit_pct"
+    with get_connection() as conn:
+        users = conn.execute("SELECT id, username FROM users ORDER BY id").fetchall()
+
+    rows = []
+    for user in users:
+        ensure_virtual_account(user["id"])
+        performance = get_virtual_performance(user["id"])
+        rows.append({"username": user["username"], **performance})
+
+    rows.sort(key=lambda item: (item[sort_key], item["active_days"]), reverse=True)
+    for index, row in enumerate(rows, start=1):
+        row["rank"] = index
+    return {"sort_by": sort_key, "leaderboard": rows}
 
 
 def place_virtual_trade(user_id: int, ticker: str, side: str, quantity: float, notes: str | None = None) -> dict:

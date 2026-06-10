@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .config import UNIVERSE
+from .config import HIGH_BETA_TICKERS
 from .database import get_connection
 from .market_data import latest_market_snapshot
 
@@ -38,14 +39,18 @@ CASH_BALANCE = 25_000.0
 
 
 def seed_default_portfolio(user_id: int) -> None:
+    from .watchlist import candidate_lookup
+
+    candidates = candidate_lookup()
     with get_connection() as conn:
         for ticker, shares in SAMPLE_HOLDINGS.items():
+            candidate = candidates.get(ticker)
             conn.execute(
                 """
-                INSERT OR IGNORE INTO portfolio_holdings (user_id, ticker, shares, target_weight)
-                VALUES (?, ?, ?, ?)
+                INSERT OR IGNORE INTO portfolio_holdings (user_id, ticker, shares, average_cost, target_weight, theme, is_high_beta)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (user_id, ticker, shares, TARGET_WEIGHTS.get(ticker, 0)),
+                (user_id, ticker, shares, 0, TARGET_WEIGHTS.get(ticker, 0), candidate.theme if candidate else None, 1 if ticker in HIGH_BETA_TICKERS else 0),
             )
         conn.commit()
 
@@ -54,7 +59,7 @@ def get_user_holdings(user_id: int) -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT ticker, shares, target_weight
+            SELECT ticker, shares, average_cost, target_weight, theme, is_high_beta, notes
             FROM portfolio_holdings
             WHERE user_id = ? AND shares > 0
             ORDER BY ticker
@@ -88,9 +93,13 @@ def get_portfolio(user_id: int) -> dict:
             {
                 "ticker": ticker,
                 "shares": shares,
+                "average_cost": holding_row["average_cost"],
                 "price": price,
                 "market_value": market_value,
                 "target_weight": holding_row["target_weight"],
+                "theme": holding_row["theme"],
+                "is_high_beta": bool(holding_row["is_high_beta"]),
+                "notes": holding_row["notes"],
             }
         )
 

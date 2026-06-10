@@ -82,6 +82,11 @@ VITE_API_BASE_URL=http://localhost:8000 npm run dev
 - `GET /risk` - risk rules, exposure summary, and warnings
 - `GET /report/daily` - daily portfolio and signal report
 - `GET /watchlist/potential` - scored AI infrastructure candidates, including held tickers
+- `GET /recommendations/buy` - user-specific suggested purchases based on portfolio balance and risk rules
+- `GET /virtual/account` - authenticated user's paper trading account
+- `POST /virtual/trade` - create a paper buy/sell order
+- `GET /virtual/performance` - authenticated user's paper trading performance
+- `GET /virtual/leaderboard` - public virtual trading leaderboard
 - `GET /virtual-portfolio` - authenticated user's paper trading account
 - `POST /virtual-portfolio/trade` - create a paper buy/sell order
 - `GET /ticker/{ticker}/lookup` - latest ticker price, company name, signal, and score where available
@@ -92,7 +97,7 @@ Authenticated endpoints require:
 Authorization: Bearer <jwt>
 ```
 
-## User Accounts
+## User Accounts and Login
 
 The app has a simple JWT account system. Register in the UI or call:
 
@@ -118,7 +123,29 @@ Each user has private data for:
 
 Market data, prices, indicators, signals, and candidate scores are shared globally.
 
-New users are seeded with the sample AI infrastructure portfolio. Holdings control the `is_current_holding`, `current_weight`, and `target_weight` fields in `GET /watchlist/potential`.
+After login, the UI fetches `GET /auth/me`, shows the username in the top navigation bar, and stores the JWT in the browser for authenticated API calls. Logout removes the local token.
+
+Unauthenticated users are redirected to the Login/Register page.
+
+New users are seeded with the sample AI infrastructure portfolio. Holdings control the `is_current_holding`, `current_weight`, and `target_weight` fields in `GET /watchlist/potential`. Potential Stocks includes both held and non-held candidates; held tickers are marked with a `HELD` badge.
+
+## Editing Portfolio Holdings
+
+Use the Portfolio page to add, edit, or delete the current user's holdings.
+
+Editable fields:
+
+- `ticker`
+- `shares`
+- `average_cost`
+- `target_weight`
+- `theme`
+- `is_high_beta`
+- `notes`
+
+Every holding belongs to `user_id`. Users can only view and modify their own holdings.
+
+After portfolio changes, the UI refreshes portfolio data and the score cache. Dashboard metrics, risk warnings, Potential Stocks held badges, and Suggested Purchases update from the latest user portfolio.
 
 Manage holdings through the API:
 
@@ -126,15 +153,29 @@ Manage holdings through the API:
 curl -X POST http://localhost:8000/portfolio/holdings \
   -H "Authorization: Bearer <jwt>" \
   -H "Content-Type: application/json" \
-  -d '{"ticker":"MSFT","shares":5,"target_weight":0.05}'
+  -d '{"ticker":"MSFT","shares":5,"average_cost":430,"target_weight":0.05,"theme":"Hyperscaler / AI Software","is_high_beta":false,"notes":"starter"}'
 
 curl -X DELETE http://localhost:8000/portfolio/holdings/MSFT \
   -H "Authorization: Bearer <jwt>"
 ```
 
+## Dashboard Suggested Purchases
+
+`GET /recommendations/buy` returns user-specific buy ideas based on:
+
+- Candidate score
+- Current portfolio holdings and target weights
+- Missing or underweight AI infrastructure themes
+- Trend filter: price above MA200 and positive 6-month momentum
+- Risk rules: cash minimum, AI exposure cap, high beta cap, and single-stock cap
+
+Each recommendation includes `ticker`, `company_name`, `score`, `theme`, `reason`, `suggested_action`, `suggested_weight`, and `risk_check_status`.
+
 ## Virtual Paper Trading
 
 The virtual account starts with `$100,000` cash per user. It does not connect to a broker.
+
+Use the Virtual Trading page with a free-text ticker input. The UI automatically uppercases and trims tickers, validates the format, fetches the latest price, and displays company name, score, and signal when available.
 
 Trade payload:
 
@@ -149,6 +190,47 @@ Trade payload:
 ```
 
 The backend validates ticker format and market data availability, then uses the latest downloaded price for execution.
+
+BUY behavior:
+
+- Checks virtual cash is sufficient
+- Subtracts cash
+- Adds or updates the virtual position
+
+SELL behavior:
+
+- Checks the user owns enough virtual shares
+- Adds cash
+- Reduces or deletes the virtual position
+
+## Virtual Leaderboard
+
+`GET /virtual/leaderboard` is public and ranks all users by virtual trading performance.
+
+Displayed fields:
+
+- `rank`
+- `username`
+- `starting_virtual_cash`
+- `current_virtual_equity`
+- `total_profit`
+- `total_profit_pct`
+- `realized_pnl`
+- `unrealized_pnl`
+- `first_trade_date`
+- `last_trade_date`
+- `active_days`
+- `profit_per_day`
+
+Calculations:
+
+- `current_virtual_equity = virtual cash + latest market value of virtual positions`
+- `total_profit = current_virtual_equity - starting_virtual_cash`
+- `total_profit_pct = total_profit / starting_virtual_cash`
+- `active_days = days between first_trade_date and current date`, with a minimum of 1 after the first trade
+- `profit_per_day = total_profit / active_days`
+
+Default sorting is `total_profit_pct` descending, then `active_days` descending. Supported sort keys are `total_profit`, `total_profit_pct`, `profit_per_day`, and `active_days`.
 
 ## Deploy Online
 

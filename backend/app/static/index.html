@@ -37,18 +37,23 @@
       .brand { display: grid; gap: 3px; }
       .brand strong { font-size: 18px; }
       .brand span { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
-      nav { display: flex; gap: 8px; flex-wrap: wrap; }
-      button, select {
+      nav { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      button, select, input, textarea {
         border: 1px solid var(--line);
         background: var(--panel);
         color: var(--ink);
         padding: 9px 12px;
         font: inherit;
         font-size: 14px;
+      }
+      button, select {
         cursor: pointer;
       }
+      textarea { min-height: 38px; resize: vertical; }
       button.active, button.primary { background: var(--ink); border-color: var(--ink); color: white; }
       button:hover { border-color: var(--ink); }
+      button.danger { color: var(--red); border-color: #f5c6c3; background: #fff8f7; }
+      button.small { padding: 6px 9px; font-size: 12px; }
       main { max-width: 1180px; margin: 0 auto; padding: 24px 18px 48px; }
       .hero {
         display: flex;
@@ -206,6 +211,12 @@
         max-width: 520px;
         margin: 36px auto;
       }
+      .auth-toggle {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 16px 16px 0;
+      }
       .auth-form {
         display: grid;
         gap: 10px;
@@ -215,6 +226,38 @@
         border: 1px solid var(--line);
         padding: 10px 12px;
         font: inherit;
+      }
+      .user-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        background: #fbfcfb;
+        font-size: 13px;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+        background: #fbfcfb;
+      }
+      .form-grid label {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .form-grid .wide { grid-column: span 2; }
+      .form-actions {
+        display: flex;
+        gap: 8px;
+        align-items: end;
       }
       .trade-form {
         display: grid;
@@ -242,7 +285,8 @@
       .empty { padding: 20px; color: var(--muted); }
 
       @media (max-width: 820px) {
-        .metrics, .two, .manual-grid, .trade-form { grid-template-columns: 1fr; }
+        .metrics, .two, .manual-grid, .trade-form, .form-grid { grid-template-columns: 1fr; }
+        .form-grid .wide { grid-column: span 1; }
         .hero { align-items: stretch; flex-direction: column; }
         h1 { font-size: 25px; }
         nav button { flex: 1 1 auto; }
@@ -262,7 +306,7 @@
     </header>
 
     <main>
-      <section class="hero">
+      <section class="hero" id="heroSection">
         <div>
           <h1>AI 基建量化仪表盘</h1>
           <p>跟踪持仓、目标权重、趋势信号和风险约束。</p>
@@ -277,6 +321,7 @@
       <section id="risk" class="page hidden"></section>
       <section id="watchlist" class="page hidden"></section>
       <section id="virtual" class="page hidden"></section>
+      <section id="leaderboard" class="page hidden"></section>
       <section id="manual" class="page hidden"></section>
     </main>
 
@@ -285,9 +330,10 @@
         ["dashboard", "Dashboard"],
         ["portfolio", "Portfolio"],
         ["signals", "Signals"],
-        ["risk", "Risk"],
         ["watchlist", "Watchlist"],
-        ["virtual", "虚拟盘"],
+        ["risk", "Risk"],
+        ["virtual", "Virtual Trading"],
+        ["leaderboard", "Leaderboard"],
         ["manual", "使用手册"]
       ];
       const universe = ["QQQ", "NVDA", "AVGO", "TSM", "MU", "MRVL", "VRT", "ANET", "AMZN", "PLTR", "TSLA"];
@@ -300,6 +346,9 @@
       let authToken = localStorage.getItem("quant_auth_token") || "";
       let currentUser = null;
       let scoreMap = {};
+      let authMode = "login";
+      let portfolioEdit = null;
+      let leaderboardSort = "total_profit_pct";
 
       const fmtCurrency = (value) => value == null ? "--" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
       const fmtPct = (value) => value == null ? "--" : `${(value * 100).toFixed(1)}%`;
@@ -347,21 +396,40 @@
           currentUser = null;
           scoreMap = {};
           localStorage.removeItem("quant_auth_token");
-          renderNav();
           page = "auth";
         }
         if (!authToken && page !== "auth") page = "auth";
         active = page;
         document.querySelectorAll(".page").forEach((el) => el.classList.toggle("hidden", el.id !== page));
+        document.getElementById("heroSection").classList.toggle("hidden", !authToken);
         document.querySelectorAll("nav button").forEach((btn) => btn.classList.toggle("active", btn.dataset.page === page));
+        renderNav();
         render();
       }
 
       function renderNav() {
-        const authButton = authToken ? `<button data-page="logout">Logout</button>` : `<button data-page="auth">Login</button>`;
-        document.getElementById("nav").innerHTML = `${pages.map(([id, label]) => `<button data-page="${id}">${label}</button>`).join("")}${authButton}`;
+        const nav = document.getElementById("nav");
+        if (!authToken) {
+          nav.innerHTML = `<button data-page="auth" class="active">Login / Register</button>`;
+        } else {
+          nav.innerHTML = `${pages.map(([id, label]) => `<button data-page="${id}" class="${active === id ? "active" : ""}">${label}</button>`).join("")}<span class="user-chip">${currentUser?.username || "User"}</span><button data-page="logout">Logout</button>`;
+        }
         document.querySelectorAll("nav button").forEach((btn) => btn.addEventListener("click", () => setActive(btn.dataset.page)));
-        setActive(authToken ? active : "auth");
+      }
+
+      async function fetchCurrentUser() {
+        if (!authToken) return null;
+        const result = await api("/auth/me");
+        currentUser = result.user;
+        return currentUser;
+      }
+
+      async function finishAuth(result) {
+        authToken = result.token;
+        localStorage.setItem("quant_auth_token", authToken);
+        await fetchCurrentUser();
+        await loadScoreMap();
+        setActive("dashboard");
       }
 
       function rows(items, cols) {
@@ -379,23 +447,40 @@
       }
 
       function renderAuth(message = "") {
+        const isRegister = authMode === "register";
         document.getElementById("auth").innerHTML = `
           <div class="card auth-panel">
-            <div class="section-head"><h2>登录 / 注册</h2><span class="muted">User-specific portfolio and virtual trades</span></div>
-            <form class="auth-form" id="loginForm">
-              <input id="loginIdentity" placeholder="username or email" />
-              <input id="loginPassword" placeholder="password" type="password" />
-              <button class="primary" type="submit">登录</button>
-            </form>
-            <form class="auth-form" id="registerForm" style="border-top:1px solid var(--line)">
-              <input id="registerUsername" placeholder="username" />
-              <input id="registerEmail" placeholder="email" />
-              <input id="registerPassword" placeholder="password, min 6 chars" type="password" />
-              <button type="submit">注册新用户</button>
-            </form>
+            <div class="section-head"><h2>${isRegister ? "注册账户" : "登录账户"}</h2><span class="muted">Portfolio and virtual trades are user-specific</span></div>
+            <div class="auth-toggle">
+              <button id="showLogin" class="${!isRegister ? "primary" : ""}">Login</button>
+              <button id="showRegister" class="${isRegister ? "primary" : ""}">Register</button>
+            </div>
+            ${!isRegister ? `
+              <form class="auth-form" id="loginForm">
+                <input id="loginIdentity" placeholder="email or username" autocomplete="username" />
+                <input id="loginPassword" placeholder="password" type="password" autocomplete="current-password" />
+                <button class="primary" type="submit">登录</button>
+              </form>
+            ` : `
+              <form class="auth-form" id="registerForm">
+                <input id="registerUsername" placeholder="username" autocomplete="username" />
+                <input id="registerEmail" placeholder="email" autocomplete="email" />
+                <input id="registerPassword" placeholder="password, min 6 chars" type="password" autocomplete="new-password" />
+                <input id="registerConfirm" placeholder="confirm password" type="password" autocomplete="new-password" />
+                <button class="primary" type="submit">注册并登录</button>
+              </form>
+            `}
             <div class="${message.includes("失败") || message.includes("Invalid") ? "bad" : "muted"}" style="padding:0 16px 16px">${message}</div>
           </div>`;
-        document.getElementById("loginForm").addEventListener("submit", async (event) => {
+        document.getElementById("showLogin").addEventListener("click", () => {
+          authMode = "login";
+          renderAuth();
+        });
+        document.getElementById("showRegister").addEventListener("click", () => {
+          authMode = "register";
+          renderAuth();
+        });
+        if (!isRegister) document.getElementById("loginForm").addEventListener("submit", async (event) => {
           event.preventDefault();
           try {
             const result = await api("/auth/login", {
@@ -406,34 +491,32 @@
                 password: document.getElementById("loginPassword").value
               })
             });
-            authToken = result.token;
-            currentUser = result.user;
-            localStorage.setItem("quant_auth_token", authToken);
-            await loadScoreMap();
-            renderNav();
-            setActive("dashboard");
+            await finishAuth(result);
           } catch (error) {
             renderAuth(`登录失败：${error.message}`);
           }
         });
-        document.getElementById("registerForm").addEventListener("submit", async (event) => {
+        if (isRegister) document.getElementById("registerForm").addEventListener("submit", async (event) => {
           event.preventDefault();
+          const username = document.getElementById("registerUsername").value.trim();
+          const email = document.getElementById("registerEmail").value.trim();
+          const password = document.getElementById("registerPassword").value;
+          const confirm = document.getElementById("registerConfirm").value;
+          if (!username) return renderAuth("注册失败：username cannot be empty");
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return renderAuth("注册失败：email must be valid");
+          if (password.length < 6) return renderAuth("注册失败：password must be at least 6 characters");
+          if (password !== confirm) return renderAuth("注册失败：password and confirm password must match");
           try {
             const result = await api("/auth/register", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                username: document.getElementById("registerUsername").value,
-                email: document.getElementById("registerEmail").value,
-                password: document.getElementById("registerPassword").value
+                username,
+                email,
+                password
               })
             });
-            authToken = result.token;
-            currentUser = result.user;
-            localStorage.setItem("quant_auth_token", authToken);
-            await loadScoreMap();
-            renderNav();
-            setActive("dashboard");
+            await finishAuth(result);
           } catch (error) {
             renderAuth(`注册失败：${error.message}`);
           }
@@ -441,7 +524,7 @@
       }
 
       async function renderDashboard() {
-        const data = await api("/report/daily");
+        const [data, recs] = await Promise.all([api("/report/daily"), api("/recommendations/buy")]);
         const counts = data.signal_counts || {};
         document.getElementById("dashboard").innerHTML = `
           <div class="grid metrics">
@@ -470,29 +553,124 @@
               </div>
             </div>
           </div>`;
+        document.getElementById("dashboard").insertAdjacentHTML("beforeend", `
+          <div class="card" style="margin-top:12px">
+            <div class="section-head"><h2>Suggested Purchases</h2><span class="muted">User-specific balance + risk checks</span></div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Ticker</th><th>Company</th><th>Theme</th><th>Score</th><th>Suggested Weight</th><th>Risk</th><th>Reason</th><th>Action</th></tr></thead>
+              <tbody>${recs.recommendations.length ? rows(recs.recommendations.slice(0, 8), [
+                (x) => tickerLabel(x.ticker, x.score),
+                (x) => x.company_name,
+                (x) => x.theme,
+                (x) => `<b>${x.score}</b>`,
+                (x) => fmtPct(x.suggested_weight),
+                (x) => `<span class="${x.risk_check_status === "PASS" ? "good" : "bad"}">${x.risk_check_status}</span>`,
+                (x) => x.reason,
+                (x) => x.suggested_action
+              ]) : `<tr><td colspan="8" class="empty">暂无建议。可以刷新市场数据或调整持仓目标权重后再看。</td></tr>`}</tbody>
+            </table></div>
+          </div>`);
       }
 
       async function renderPortfolio() {
         const data = await api("/portfolio");
+        const edit = portfolioEdit || { ticker: "", shares: 0, average_cost: 0, target_weight: 0, theme: "", is_high_beta: false, notes: "" };
         document.getElementById("portfolio").innerHTML = `
           <div class="card">
             <div class="section-head"><h2>Portfolio</h2><span class="muted">Total ${fmtCurrency(data.total_value)}</span></div>
+            <form class="form-grid" id="holdingForm">
+              <label>Ticker
+                <input id="holdingTicker" value="${edit.ticker || ""}" placeholder="NVDA" />
+              </label>
+              <label>Shares
+                <input id="holdingShares" type="number" min="0" step="0.0001" value="${edit.shares ?? 0}" />
+              </label>
+              <label>Average Cost
+                <input id="holdingCost" type="number" min="0" step="0.01" value="${edit.average_cost ?? 0}" />
+              </label>
+              <label>Target Weight
+                <input id="holdingTarget" type="number" min="0" step="0.01" value="${((edit.target_weight || 0) * 100).toFixed(2)}" />
+              </label>
+              <label>Theme
+                <input id="holdingTheme" value="${edit.theme || ""}" placeholder="Core AI Infra" />
+              </label>
+              <label>High Beta
+                <select id="holdingHighBeta">
+                  <option value="false" ${!edit.is_high_beta ? "selected" : ""}>No</option>
+                  <option value="true" ${edit.is_high_beta ? "selected" : ""}>Yes</option>
+                </select>
+              </label>
+              <label class="wide">Notes
+                <input id="holdingNotes" value="${edit.notes || ""}" placeholder="optional" />
+              </label>
+              <div class="form-actions">
+                <button class="primary" type="submit">${portfolioEdit ? "保存持仓" : "添加持仓"}</button>
+                ${portfolioEdit ? `<button type="button" id="cancelHolding">取消</button>` : ""}
+              </div>
+            </form>
             <div class="table-wrap"><table>
-              <thead><tr><th>Ticker</th><th>Shares</th><th>Price</th><th>Value</th><th>Current</th><th>Target</th><th>Gap</th></tr></thead>
+              <thead><tr><th>Ticker</th><th>Shares</th><th>Avg Cost</th><th>Price</th><th>Value</th><th>Current</th><th>Target</th><th>Gap</th><th>Theme</th><th>High Beta</th><th>Notes</th><th>Actions</th></tr></thead>
               <tbody>
                 ${rows(data.holdings, [
                   (x) => tickerLabel(x.ticker),
                   (x) => x.shares,
+                  (x) => fmtCurrency(x.average_cost),
                   (x) => fmtCurrency(x.price),
                   (x) => fmtCurrency(x.market_value),
                   (x) => fmtPct(x.current_weight),
                   (x) => fmtPct(x.target_weight),
-                  (x) => `<span class="${x.weight_gap >= 0 ? "good" : "bad"}">${fmtPct(x.weight_gap)}</span>`
+                  (x) => `<span class="${x.weight_gap >= 0 ? "good" : "bad"}">${fmtPct(x.weight_gap)}</span>`,
+                  (x) => x.theme || "",
+                  (x) => x.is_high_beta ? "Yes" : "No",
+                  (x) => x.notes || "",
+                  (x) => `<button class="small" data-edit="${x.ticker}">Edit</button> <button class="small danger" data-delete="${x.ticker}">Delete</button>`
                 ])}
-                <tr><td><b>Cash</b></td><td>--</td><td>--</td><td>${fmtCurrency(data.cash)}</td><td>${fmtPct(data.cash / data.total_value)}</td><td>${fmtPct(data.target_weights.CASH)}</td><td>${fmtPct(data.target_weights.CASH - data.cash / data.total_value)}</td></tr>
+                <tr><td><b>Cash</b></td><td>--</td><td>--</td><td>--</td><td>${fmtCurrency(data.cash)}</td><td>${fmtPct(data.cash / data.total_value)}</td><td>${fmtPct(data.target_weights.CASH)}</td><td>${fmtPct(data.target_weights.CASH - data.cash / data.total_value)}</td><td></td><td></td><td></td><td></td></tr>
               </tbody>
             </table></div>
           </div>`;
+        document.getElementById("holdingTicker").addEventListener("input", (event) => {
+          event.target.value = event.target.value.trim().toUpperCase();
+        });
+        document.getElementById("holdingForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const ticker = document.getElementById("holdingTicker").value.trim().toUpperCase();
+          if (!/^[A-Z0-9.-]+$/.test(ticker)) return alert("Invalid ticker format");
+          const payload = {
+            ticker,
+            shares: Number(document.getElementById("holdingShares").value),
+            average_cost: Number(document.getElementById("holdingCost").value),
+            target_weight: Number(document.getElementById("holdingTarget").value) / 100,
+            theme: document.getElementById("holdingTheme").value.trim(),
+            is_high_beta: document.getElementById("holdingHighBeta").value === "true",
+            notes: document.getElementById("holdingNotes").value.trim()
+          };
+          await api("/portfolio/holdings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          portfolioEdit = null;
+          scoreMap = {};
+          await loadScoreMap();
+          await renderPortfolio();
+        });
+        if (portfolioEdit) document.getElementById("cancelHolding").addEventListener("click", () => {
+          portfolioEdit = null;
+          renderPortfolio();
+        });
+        document.querySelectorAll("[data-edit]").forEach((btn) => btn.addEventListener("click", () => {
+          portfolioEdit = data.holdings.find((item) => item.ticker === btn.dataset.edit);
+          renderPortfolio();
+        }));
+        document.querySelectorAll("[data-delete]").forEach((btn) => btn.addEventListener("click", async () => {
+          if (!confirm(`Delete ${btn.dataset.delete}?`)) return;
+          await api(`/portfolio/holdings/${btn.dataset.delete}`, { method: "DELETE" });
+          portfolioEdit = null;
+          scoreMap = {};
+          await loadScoreMap();
+          await renderPortfolio();
+        }));
       }
 
       async function renderSignals() {
@@ -580,7 +758,7 @@
       }
 
       async function renderVirtualPortfolio(message = "") {
-        const [data, health] = await Promise.all([api("/virtual-portfolio"), api("/health")]);
+        const [data, health] = await Promise.all([api("/virtual/account"), api("/health")]);
         virtualTickers = [...new Set([...(health.universe || []), ...(health.candidate_universe || [])])].sort();
         document.getElementById("virtual").innerHTML = `
           <div class="grid metrics">
@@ -678,6 +856,14 @@
             return null;
           }
         }
+        let tickerLookupTimer = null;
+        document.getElementById("tradeTicker").addEventListener("input", (event) => {
+          event.target.value = event.target.value.trim().toUpperCase();
+          clearTimeout(tickerLookupTimer);
+          tickerLookupTimer = setTimeout(() => {
+            if (event.target.value) lookupTradeTicker();
+          }, 450);
+        });
         document.getElementById("tradeTicker").addEventListener("change", lookupTradeTicker);
         document.getElementById("tradeTicker").addEventListener("blur", lookupTradeTicker);
 
@@ -693,7 +879,7 @@
             notes: document.getElementById("tradeNotes").value.trim()
           };
           try {
-            await api("/virtual-portfolio/trade", {
+            await api("/virtual/trade", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload)
@@ -702,6 +888,43 @@
           } catch (error) {
             await renderVirtualPortfolio(`交易失败：${error.message}`);
           }
+        });
+      }
+
+      async function renderLeaderboard() {
+        const data = await api(`/virtual/leaderboard?sort_by=${encodeURIComponent(leaderboardSort)}`);
+        document.getElementById("leaderboard").innerHTML = `
+          <div class="card">
+            <div class="section-head">
+              <h2>Leaderboard</h2>
+              <div class="tabs">
+                <select id="leaderboardSort">
+                  ${[
+                    ["total_profit_pct", "Total Profit %"],
+                    ["total_profit", "Total Profit"],
+                    ["profit_per_day", "Profit / Day"],
+                    ["active_days", "Active Days"]
+                  ].map(([value, label]) => `<option value="${value}" ${value === leaderboardSort ? "selected" : ""}>${label}</option>`).join("")}
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Rank</th><th>Username</th><th>Total Profit</th><th>Total Profit %</th><th>Active Days</th><th>Profit / Day</th><th>Current Equity</th><th>Last Trade</th></tr></thead>
+              <tbody>${data.leaderboard.length ? rows(data.leaderboard, [
+                (x) => `<b>${x.rank}</b>`,
+                (x) => x.username,
+                (x) => `<span class="${x.total_profit >= 0 ? "good" : "bad"}">${fmtCurrency(x.total_profit)}</span>`,
+                (x) => `<span class="${x.total_profit_pct >= 0 ? "good" : "bad"}">${fmtPct(x.total_profit_pct)}</span>`,
+                (x) => x.active_days,
+                (x) => fmtCurrency(x.profit_per_day),
+                (x) => fmtCurrency(x.current_virtual_equity),
+                (x) => x.last_trade_date || "--"
+              ]) : `<tr><td colspan="8" class="empty">暂无虚拟交易排名。</td></tr>`}</tbody>
+            </table></div>
+          </div>`;
+        document.getElementById("leaderboardSort").addEventListener("change", (event) => {
+          leaderboardSort = event.target.value;
+          renderLeaderboard();
         });
       }
 
@@ -804,8 +1027,9 @@
                 <li>先看 Dashboard：确认组合总值、现金比例、AI 主题曝险和风险告警数量。</li>
                 <li>再看 Signals：找出 buy、reduce、sell，优先处理 sell 和 reduce。</li>
                 <li>打开 Watchlist 的 Price History：选择单只股票，确认价格是否站上 MA50 和 MA200。</li>
-                <li>打开 Watchlist 的 Potential Stocks：只看当前没有持有的候选股票，按 score 从高到低挑选观察名单。</li>
-                <li>打开虚拟盘：先用小仓位模拟买卖，观察候选股进入组合后的权重和盈亏变化。</li>
+                <li>打开 Watchlist 的 Potential Stocks：按 score 从高到低挑选观察名单；已持有股票会显示 HELD。</li>
+                <li>打开 Portfolio：新增、编辑或删除自己的持仓，目标权重会影响 Dashboard 的建议买入。</li>
+                <li>打开 Virtual Trading：先用小仓位模拟买卖，观察候选股进入组合后的权重和盈亏变化。</li>
                 <li>最后看 Risk：检查单票、高 beta、现金和 AI 主题曝险是否越线。</li>
               </ol>
             </div>
@@ -818,7 +1042,7 @@
                 <li>动量：6M momentum 为正，说明过去半年仍在上涨；3M momentum 可用来判断近期是否加速或转弱。</li>
                 <li>波动：volatility 越高，仓位越要克制，尤其是 NVDA、MU、MRVL、VRT、PLTR、TSLA 这类高 beta 名单。</li>
                 <li>仓位：再好的股票也不能单票过重。本系统默认单只股票不超过 15%，高 beta 股票不超过 10%。</li>
-                <li>候选股：如果股票已经在 Portfolio 持仓里，它不会出现在 Potential Stocks；卖出并从持仓移除后，才会重新进入候选池。</li>
+                <li>候选股：Potential Stocks 不再排除已持有股票；已持有股票会显示 HELD、current weight 和 target weight。</li>
               </ol>
             </div>
           </div>
@@ -854,26 +1078,27 @@
                 <li>Crypto 权重不超过 15%。</li>
                 <li>现金权重至少保留 10%。</li>
                 <li>AI 主题总曝险不超过 70%。</li>
-                <li>虚拟盘不连接真实券商，只用于练习交易流程和观察组合变化。</li>
+                <li>Virtual Trading 不连接真实券商，只用于练习交易流程和观察组合变化。</li>
               </ul>
             </div>
           </div>
 
           <div class="card manual-block" style="margin-top:12px">
-            <h3>五、虚拟盘怎么用</h3>
+            <h3>五、账户和 Portfolio 怎么用</h3>
             <ol>
-              <li>虚拟盘默认初始现金为 $100,000。</li>
-              <li>选择 ticker、buy/sell 和 shares 后提交，系统会用当前最新价格模拟成交。</li>
-              <li>买入时不能超过虚拟现金；卖出时不能超过已有虚拟持仓。</li>
-              <li>持仓表会显示平均成本、当前价格、市值、权重和未实现盈亏。</li>
-              <li>虚拟盘适合先测试 Potential Stocks 的想法，再决定是否加入真实观察或组合计划。</li>
+              <li>每个用户都有自己的 Portfolio、Virtual Trading 和 watchlist notes；登录后只能看到自己的数据。</li>
+              <li>Portfolio 可以新增、编辑、删除持仓，字段包括 ticker、shares、average cost、target weight、theme、high beta 和 notes。</li>
+              <li>修改持仓后，Dashboard、Risk、Potential Stocks 和 Suggested Purchases 会基于新组合重新计算。</li>
+              <li>target weight 用百分比填写，例如 5 代表目标权重 5%。</li>
+              <li>Dashboard 的 Suggested Purchases 会优先寻找高分、补足缺失主题且不触发风险规则的候选股。</li>
             </ol>
           </div>
 
           <div class="card manual-block" style="margin-top:12px">
             <h3>六、Potential Stocks 怎么用</h3>
             <ol>
-              <li>Potential Stocks 显示的是 AI 基建候选宇宙中“当前未持有”的股票。</li>
+              <li>Potential Stocks 显示完整 AI 基建候选宇宙，股票可以同时出现在 Portfolio 和 Potential Stocks。</li>
+              <li>已持有股票会显示 HELD，并展示 current weight 与 target weight。</li>
               <li>候选宇宙包括 Core AI Infra、AI Networking、Power / Cooling、Hyperscaler / AI Software、Speculative AI。</li>
               <li>默认按 score 降序排序，优先看 STRONG CANDIDATE，再看 WATCH CANDIDATE。</li>
               <li>用 Theme 过滤想看的子赛道，比如 AI Networking 或 Power / Cooling。</li>
@@ -920,13 +1145,13 @@
           </div>
 
           <div class="card manual-block" style="margin-top:12px">
-            <h3>十、候选股决策流程</h3>
+            <h3>十、Virtual Trading 和 Leaderboard</h3>
             <ol>
-              <li>先过滤掉 AVOID / WAIT，只留下 STRONG 或 WATCH。</li>
-              <li>优先选择 AI 基建核心链条：芯片、网络、电力和散热。</li>
-              <li>检查 Entry Zone，避免买入 Overextended 的股票。</li>
-              <li>再回到 Portfolio 和 Risk，确认新增仓位不会让单票、高 beta 或 AI 主题曝险超限。</li>
-              <li>最后才考虑小仓位试探，不把评分当成自动交易指令。</li>
+              <li>Virtual Trading 默认初始现金为 $100,000。</li>
+              <li>手动输入 ticker，系统会自动大写、校验格式、拉取最新价格，并显示公司名、score 和 signal。</li>
+              <li>BUY 会检查现金是否足够；SELL 会检查持股数量是否足够。</li>
+              <li>Leaderboard 按用户虚拟盘表现公开排名，默认按 total profit % 排序。</li>
+              <li>active days 从第一笔交易日期算到今天；profit per day = total profit / active days。</li>
             </ol>
           </div>`;
       }
@@ -946,6 +1171,7 @@
           if (active === "risk") await renderRisk();
           if (active === "watchlist") await renderWatchlist();
           if (active === "virtual") await renderVirtualPortfolio();
+          if (active === "leaderboard") await renderLeaderboard();
           if (active === "manual") renderManual();
         } catch (error) {
           if (!authToken) {
@@ -972,7 +1198,24 @@
         }
       });
 
-      renderNav();
+      async function boot() {
+        if (authToken) {
+          try {
+            await fetchCurrentUser();
+          } catch {
+            authToken = "";
+            currentUser = null;
+            localStorage.removeItem("quant_auth_token");
+            active = "auth";
+          }
+        } else {
+          active = "auth";
+        }
+        renderNav();
+        setActive(authToken ? active : "auth");
+      }
+
+      boot();
     </script>
   </body>
 </html>

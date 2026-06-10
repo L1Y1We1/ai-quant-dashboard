@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -13,14 +14,22 @@ from .database import get_connection, init_db
 from .market_data import data_status, get_price_history, latest_market_snapshot, refresh_prices
 from .portfolio import get_portfolio, seed_default_portfolio
 from .report import get_daily_report
+from .recommendations import get_buy_recommendations
 from .risk import get_risk_report
 from .strategy import classify_signal, get_signals
-from .virtual_portfolio import get_virtual_portfolio, normalize_ticker, place_virtual_trade
+from .virtual_portfolio import (
+    get_virtual_leaderboard,
+    get_virtual_performance,
+    get_virtual_portfolio,
+    normalize_ticker,
+    place_virtual_trade,
+)
 from .watchlist import build_candidate_item, candidate_lookup, candidate_tickers, get_potential_watchlist
 
 
 app = FastAPI(title="AI Infrastructure Quant Platform", version="0.1.0")
 STATIC_DIR = Path(__file__).parent / "static"
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class VirtualTradeRequest(BaseModel):
@@ -32,7 +41,7 @@ class VirtualTradeRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=2)
+    username: str = Field(..., min_length=1)
     email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=6)
 
@@ -45,7 +54,11 @@ class LoginRequest(BaseModel):
 class HoldingRequest(BaseModel):
     ticker: str = Field(..., min_length=1)
     shares: float = Field(..., ge=0)
+    average_cost: float = Field(0, ge=0)
     target_weight: float = Field(0, ge=0)
+    theme: str | None = None
+    is_high_beta: bool = False
+    notes: str | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,6 +85,8 @@ def register(payload: RegisterRequest) -> dict:
     email = payload.email.strip().lower()
     if not username or not email:
         raise HTTPException(status_code=400, detail="Username and email are required")
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Invalid email")
     with get_connection() as conn:
         existing = conn.execute(
             "SELECT id FROM users WHERE username = ? OR email = ?",
@@ -159,12 +174,13 @@ def upsert_holding(holding: HoldingRequest, user: dict = Depends(get_current_use
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO portfolio_holdings (user_id, ticker, shares, target_weight)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO portfolio_holdings (user_id, ticker, shares, average_cost, target_weight, theme, is_high_beta, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id, ticker)
-            DO UPDATE SET shares = excluded.shares, target_weight = excluded.target_weight, updated_at = CURRENT_TIMESTAMP
+            DO UPDATE SET shares = excluded.shares, average_cost = excluded.average_cost, target_weight = excluded.target_weight,
+                theme = excluded.theme, is_high_beta = excluded.is_high_beta, notes = excluded.notes, updated_at = CURRENT_TIMESTAMP
             """,
-            (user["id"], ticker, holding.shares, holding.target_weight),
+            (user["id"], ticker, holding.shares, holding.average_cost, holding.target_weight, holding.theme, 1 if holding.is_high_beta else 0, holding.notes),
         )
         conn.commit()
     return get_portfolio(user["id"])
@@ -194,13 +210,41 @@ def potential_watchlist(user: dict = Depends(get_current_user)) -> dict:
     return get_potential_watchlist(user["id"], user_portfolio)
 
 
+@app.get("/recommendations/buy")
+def buy_recommendations(user: dict = Depends(get_current_user)) -> dict:
+    return get_buy_recommendations(user["id"])
+
+
 @app.get("/virtual-portfolio")
 def virtual_portfolio(user: dict = Depends(get_current_user)) -> dict:
     return get_virtual_portfolio(user["id"])
 
 
+@app.get("/virtual/account")
+def virtual_account(user: dict = Depends(get_current_user)) -> dict:
+    return get_virtual_portfolio(user["id"])
+
+
+@app.get("/virtual/performance")
+def virtual_performance(user: dict = Depends(get_current_user)) -> dict:
+    return get_virtual_performance(user["id"])
+
+
+@app.get("/virtual/leaderboard")
+def virtual_leaderboard(sort_by: str = "total_profit_pct") -> dict:
+    return get_virtual_leaderboard(sort_by)
+
+
 @app.post("/virtual-portfolio/trade")
 def virtual_trade(trade: VirtualTradeRequest, user: dict = Depends(get_current_user)) -> dict:
+    try:
+        return place_virtual_trade(user["id"], trade.ticker, trade.side, trade.quantity, trade.notes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/virtual/trade")
+def virtual_trade_v2(trade: VirtualTradeRequest, user: dict = Depends(get_current_user)) -> dict:
     try:
         return place_virtual_trade(user["id"], trade.ticker, trade.side, trade.quantity, trade.notes)
     except ValueError as exc:
