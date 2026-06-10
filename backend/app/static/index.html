@@ -365,6 +365,7 @@
           if (res.status === 401) {
             authToken = "";
             currentUser = null;
+            authMode = "login";
             localStorage.removeItem("quant_auth_token");
             active = "auth";
           }
@@ -395,6 +396,7 @@
           authToken = "";
           currentUser = null;
           scoreMap = {};
+          authMode = "login";
           localStorage.removeItem("quant_auth_token");
           page = "auth";
         }
@@ -426,6 +428,7 @@
 
       async function finishAuth(result) {
         authToken = result.token;
+        authMode = "login";
         localStorage.setItem("quant_auth_token", authToken);
         await fetchCurrentUser();
         await loadScoreMap();
@@ -487,7 +490,7 @@
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                username_or_email: document.getElementById("loginIdentity").value,
+                username_or_email: document.getElementById("loginIdentity").value.trim(),
                 password: document.getElementById("loginPassword").value
               })
             });
@@ -1205,10 +1208,12 @@
           } catch {
             authToken = "";
             currentUser = null;
+            authMode = "login";
             localStorage.removeItem("quant_auth_token");
             active = "auth";
           }
         } else {
+          authMode = "login";
           active = "auth";
         }
         renderNav();
